@@ -65,6 +65,7 @@ def generator(samples, batch_size=32):
             # trim image to only see section with road
             X_train = np.array(augmented_images)
             y_train = np.array(augmented_measurements)
+            #X_train = X_train.reshape(X_train.shape[0], 320, 160, 3)
             yield shuffle(X_train, y_train)
 
 #Training the data using the generator function.
@@ -74,7 +75,7 @@ validation_generator = generator(validation_samples, batch_size=32)
 model = Sequential()
 
 #Preprocessing the data.
-model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(160,320,3), output_shape=(160, 320, 3)))
+model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(320, 160, 3), output_shape=(320, 160, 3)))
 
 #Cropping unwanted parts of the image (sky, hills and car hood).
 model.add(Cropping2D(cropping=((70, 25), (0, 0))))
