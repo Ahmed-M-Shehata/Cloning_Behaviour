@@ -11,7 +11,6 @@ import csv
 from keras.models import Sequential
 from keras.layers import Flatten, Dense, Lambda, Dropout, Cropping2D
 from keras.layers.convolutional import Convolution2D
-from keras.layers.pooling import MaxPooling2D
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle
 import numpy as np
@@ -29,43 +28,45 @@ train_samples, validation_samples = train_test_split(samples, test_size=0.2)
 
 #Using generator to load data and preprocess it on the fly.
 def generator(samples, batch_size=32):
-    num_samples = len(samples)
     while 1: # Loop forever so the generator never terminates
         shuffle(samples)
-        for offset in range(0, num_samples, batch_size):
-            batch_samples = samples[offset:offset+batch_size]
-
-            correction = 0.2
-            images = []
-            angles = []
-            for batch_sample in batch_samples:
-                name1 = './IMG/'+batch_sample[0].split('/')[-1]
-                name2 = './IMG/'+batch_sample[1].split('/')[-1]
-                name3 = './IMG/'+batch_sample[2].split('/')[-1]
-                center_image = cv2.imread(name1)
-                center_angle = float(batch_sample[3])
-                left_image = cv2.imread(name2)
-                left_angle = center_angle + correction
-                right_image = cv2.imread(name3)
-                right_angle = center_angle - correction
-                images.append(center_image)
-                images.append(left_image)
-                images.append(right_image)
-                angles.append(center_angle)
-                angles.append(left_angle)
-                angles.append(right_angle)
+        batch_samples = samples
+        correction = 0.4
+        images = []
+        angles = []
+        for batch_sample in batch_samples:
             
-            augmented_images, augmented_measurements = [], []
-            for image, measurement in zip(images, angles):
-                augmented_images.append(image)
-                augmented_measurements.append(measurement)
-                augmented_images.append(cv2.flip(image, 1))
-                augmented_measurements.append(measurement*-1.0)
+            #Adding the images from the three cameras and steering angles.
+            name1 = 'data/IMG/'+batch_sample[0].split('/')[-1]
+            name2 = 'data/IMG/'+batch_sample[1].split('/')[-1]
+            name3 = 'data/IMG/'+batch_sample[2].split('/')[-1]
+            center_image = cv2.imread(name1)
+            center_angle = float(batch_sample[3])
+            left_image = cv2.imread(name2)
+            left_angle = center_angle + correction
+            right_image = cv2.imread(name3)
+            right_angle = center_angle - correction
+            images.append(center_image)
+            images.append(left_image)
+            images.append(right_image)
+            angles.append(center_angle)
+            angles.append(left_angle)
+            angles.append(right_angle)
+            for i in range(0, len(images), batch_size):
+                image_batch = images[i:i+batch_size]
+                angle_batch = angles[i:i+batch_size]
+                images, angles = shuffle(images, angles)
+                
+                #Augmented the images by flipping them horizontally.
+                augmented_images, augmented_measurements = [], []
+                for image, measurement in zip(image_batch, angle_batch):
+                    augmented_images.append(image)
+                    augmented_measurements.append(measurement)
+                    augmented_images.append(cv2.flip(image, 1))
+                    augmented_measurements.append(measurement*-1.0)
 
-            # trim image to only see section with road
             X_train = np.array(augmented_images)
             y_train = np.array(augmented_measurements)
-            #X_train = X_train.reshape(X_train.shape[0], 320, 160, 3)
             yield shuffle(X_train, y_train)
 
 #Training the data using the generator function.
@@ -75,7 +76,7 @@ validation_generator = generator(validation_samples, batch_size=32)
 model = Sequential()
 
 #Preprocessing the data.
-model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(320, 160, 3), output_shape=(320, 160, 3)))
+model.add(Lambda(lambda x: (x / 255.0) - 0.5, input_shape=(160, 320, 3), output_shape=(160, 320, 3)))
 
 #Cropping unwanted parts of the image (sky, hills and car hood).
 model.add(Cropping2D(cropping=((70, 25), (0, 0))))
@@ -85,15 +86,20 @@ model.add(Convolution2D(24, 5, 5, subsample=(2, 2), activation = 'relu'))
 model.add(Convolution2D(36, 5, 5, subsample=(2, 2), activation = 'relu'))
 model.add(Convolution2D(48, 5, 5, subsample=(2, 2), activation = 'relu'))
 
-#model.add(MaxPooling2D(pool_size=(2, 2)))
+#Adding dropout = 50%
+model.add(Dropout(0.5))
 model.add(Convolution2D(64, 3, 3, activation='relu'))
 model.add(Convolution2D(64, 3, 3, activation='relu'))
 
-#model.add(MaxPooling2D(pool_size=(2, 2)))
+#Adding dropout = 50%
+model.add(Dropout(0.5))
 model.add(Flatten())
 model.add(Dense(100))
 model.add(Dense(50))
 model.add(Dense(10))
+
+#Adding dropout = 50%
+model.add(Dropout(0.5))
 model.add(Dense(1))
 
 #compiling the data using Adam optimizer and mean square error loss.
